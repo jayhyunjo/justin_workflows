@@ -1,0 +1,83 @@
+#!/bin/bash
+#
+# protodunevd_test.jobscript
+# Simple testing jobscript to run a short ProtoDUNE-VD chain (20 events per file)
+#
+
+# ---- Setup environment ----
+source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
+
+# Use requested version and qualifier
+setup dunesw v10_10_05d00 -q e26:prof
+if [ $? -ne 0 ]; then
+  echo "Error setting up dunesw v10_05_02d00"
+  exit 1
+fi
+
+# Parallelism
+if [ -z "${JUSTIN_PROCESSORS}" ]; then
+  JUSTIN_PROCESSORS=1
+fi
+export TF_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OPENBLAS_NUM_THREADS=${JUSTIN_PROCESSORS}
+export JULIA_NUM_THREADS=${JUSTIN_PROCESSORS}
+export MKL_NUM_THREADS=${JUSTIN_PROCESSORS}
+export NUMEXPR_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OMP_NUM_THREADS=${JUSTIN_PROCESSORS}
+
+# ---- Get one input file ----
+did_pfn_rse=`$JUSTIN_PATH/justin-get-file`
+if [ "${did_pfn_rse}" == "" ] ; then
+  echo "No unprocessed files available, exiting."
+  exit 0
+fi
+
+did=`echo $did_pfn_rse | cut -f1 -d' '`
+pfn=`echo $did_pfn_rse | cut -f2 -d' '`
+rse=`echo $did_pfn_rse | cut -f3 -d' '`
+name_only=$(echo $did | cut -f2 -d':')
+
+echo "Processing file: $pfn"
+echo "RSE: $rse"
+echo "DID: $did"
+
+# ---- Set event count ----
+nevents=20
+
+# ---- Timestamp for unique output names ----
+now=$(date -u +"%Y%m%dT%H%M%SZ")
+jobid=`echo "${JUSTIN_JOBSUB_ID:-1}" | cut -f1 -d'@' | sed -e "s/\./_/"`
+stageid=${JUSTIN_STAGE_ID:-1}
+
+# ---- LArSoft chain ----
+echo "Running ProtoDUNE-VD GEN --> G4 --> DETSIM --> RECO chain"
+
+# 1. GEN
+lar -n ${nevents} -c gen_protodunevd_cosmics.fcl \
+    -o gen.root
+if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
+
+# 2. G4 stage 1
+lar -c protodunevd_g4_stage1.fcl -o g4_stage1.root gen.root
+if [ $? -ne 0 ]; then echo "G4 stage1 failed"; exit 1; fi
+
+# 3. G4 stage 2
+lar -c protodunevd_g4_stage2_nopds.fcl -o g4_stage2.root g4_stage1.root
+if [ $? -ne 0 ]; then echo "G4 stage2 failed"; exit 1; fi
+
+# 4. DETSIM
+lar -c protodunevd_detsim_nopds.fcl -o detsim.root g4_stage2.root
+if [ $? -ne 0 ]; then echo "Detsim failed"; exit 1; fi
+
+# 5. RECO
+outFile=${name_only}_${jobid}_${stageid}_${now}_reco.root
+lar -c /exp/dune/app/users/jjo/pdvd_production_test/protodunevd_reco_nopds.fcl -o ${outFile} detsim.root
+if [ $? -ne 0 ]; then echo "Reco failed"; exit 1; fi
+
+# ---- Mark as processed ----
+echo "$pfn" > justin-processed-pfns.txt
+
+echo "Job completed successfully."
+ls -lh *.root
+
+exit 0
