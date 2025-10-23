@@ -1,6 +1,7 @@
-## Initially copied from Jake Calcutt's workflow git repo for reference
-
 # Generic Script
+
+(Below are originally copied from Jake Calcutt (calcuttj))
+
 `generic.jobscript` can run `lar` using various fcl files and on various samples (data or MC from PDHD or PDSP).
 ### Test command
 <pre>justin-test-jobscript --mql &lt;MQL_REQUEST&gt; --jobscript generic.jobscript
