@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# protodunevd_test.jobscript
-# Simple testing jobscript to run a short ProtoDUNE-VD chain (20 events per file)
+# protodunehd_test.jobscript
+# Simple testing jobscript to run a short ProtoDUNE-HD chain (20 events per file)
 #
 
 # ---- Setup environment ----
@@ -10,24 +10,9 @@ source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
 # Use requested version and qualifier
 setup dunesw v10_10_05d00 -q e26:prof
 if [ $? -ne 0 ]; then
-  echo "Error setting up dunesw v10_05_02d00"
+  echo "Error setting up dunesw v10_10_05d00"
   exit 1
 fi
-
-if [ -n "${INPUT_TAR_DIR_LOCAL:-}" ]; then
-  export FCL_SEARCH_PATH="${INPUT_TAR_DIR_LOCAL}:${FCL_SEARCH_PATH}"
-fi
-
-# Choose which reco FHiCL to run
-# Prefer explicit path in CVMFS if available; otherwise fall back to bare name
-if [ -n "${INPUT_TAR_DIR_LOCAL:-}" ] && [ -f "${INPUT_TAR_DIR_LOCAL}/protodunevd_reco_nopds.fcl" ]; then
-  RECO_FCL="${RECO_FCL:-${INPUT_TAR_DIR_LOCAL}/protodunevd_reco_nopds.fcl}"
-else
-  RECO_FCL="${RECO_FCL:-protodunevd_reco_nopds.fcl}"
-fi
-echo "Using RECO_FCL = ${RECO_FCL}"
-
-
 
 # Parallelism
 if [ -z "${JUSTIN_PROCESSORS}" ]; then
@@ -65,29 +50,37 @@ jobid=`echo "${JUSTIN_JOBSUB_ID:-1}" | cut -f1 -d'@' | sed -e "s/\./_/"`
 stageid=${JUSTIN_STAGE_ID:-1}
 
 # ---- LArSoft chain ----
-echo "Running ProtoDUNE-VD GEN --> G4 --> DETSIM --> RECO chain"
+echo "Running ProtoDUNE-HD GEN --> G4 --> DETSIM --> RECO chain"
 
 # 1. GEN
-lar -n ${nevents} -c gen_protodunevd_cosmics.fcl \
-    -o gen.root
+lar -n ${nevents} -c pdhd_1GeV_h4input_cosmics.fcl \
+    -o gen.root \
+    $pfn
 if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
 
 # 2. G4 stage 1
-lar -c protodunevd_g4_stage1.fcl -o g4_stage1.root gen.root
+lar -c standard_g4_protodunehd_stage1.fcl \
+    -o g4_stage1.root \
+    gen.root
 if [ $? -ne 0 ]; then echo "G4 stage1 failed"; exit 1; fi
 
 # 3. G4 stage 2
-lar -c protodunevd_g4_stage2_nopds.fcl -o g4_stage2.root g4_stage1.root
+lar -c standard_g4_protodunehd_stage2.fcl \
+    -o g4_stage2.root \
+    g4_stage1.root
 if [ $? -ne 0 ]; then echo "G4 stage2 failed"; exit 1; fi
 
 # 4. DETSIM
-lar -c protodunevd_detsim_nopds.fcl -o detsim.root g4_stage2.root
+lar -c standard_detsim_protodunehd.fcl \
+    -o detsim.root \
+    g4_stage2.root
 if [ $? -ne 0 ]; then echo "Detsim failed"; exit 1; fi
 
 # 5. RECO
 outFile=${name_only}_${jobid}_${stageid}_${now}_reco.root
-lar -c "${RECO_FCL}" -o "${outFile}" detsim.root
-#lar -c protodunevd_reco_nopds.fcl -o ${outFile} detsim.root
+lar -c standard_reco_protodunehd_MC.fcl \
+    -o ${outFile} \
+    detsim.root
 if [ $? -ne 0 ]; then echo "Reco failed"; exit 1; fi
 
 # ---- Mark as processed ----

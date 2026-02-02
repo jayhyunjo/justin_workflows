@@ -1,0 +1,143 @@
+#!/bin/bash
+#
+# fdhd_test.jobscript
+# Simple testing jobscript to run a short FD-HD chain
+#
+
+# ---- Setup environment ----
+source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
+
+# Use requested version and qualifier
+setup dunesw v10_16_00d00 -q e26:prof
+if [ $? -ne 0 ]; then
+  echo "Error setting up dunesw v10_16_00d00"
+  exit 1
+fi
+
+# Prefer uploaded FHiCLs and WireCell configs if provided
+if [ -n "${INPUT_TAR_DIR_LOCAL:-}" ]; then
+    # Tell art/lar where to find .fcl files
+    export FW_SEARCH_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FW_SEARCH_PATH}"
+    export FCL_SEARCH_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FCL_SEARCH_PATH}"
+    export FHICL_FILE_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FHICL_FILE_PATH}"
+
+    # WireCell lookup
+    export WIRECELL_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${WIRECELL_PATH}"
+fi
+
+echo "FW_SEARCH_PATH=${FW_SEARCH_PATH}"
+echo "FCL_SEARCH_PATH=${FCL_SEARCH_PATH}"
+echo "FHICL_FILE_PATH=${FHICL_FILE_PATH}"
+echo "WIRECELL_PATH=${WIRECELL_PATH}"
+
+# Parallelism
+if [ -z "${JUSTIN_PROCESSORS}" ]; then
+  JUSTIN_PROCESSORS=1
+fi
+export TF_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OPENBLAS_NUM_THREADS=${JUSTIN_PROCESSORS}
+export JULIA_NUM_THREADS=${JUSTIN_PROCESSORS}
+export MKL_NUM_THREADS=${JUSTIN_PROCESSORS}
+export NUMEXPR_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OMP_NUM_THREADS=${JUSTIN_PROCESSORS}
+
+# ---- Get one input file (MC counter or real file, depending on submission) ----
+did_pfn_rse="$($JUSTIN_PATH/justin-get-file)"
+if [ -z "${did_pfn_rse}" ] ; then
+  echo "No unprocessed files available, exiting."
+  exit 0
+fi
+
+did=$(echo "$did_pfn_rse" | cut -f1 -d' ')
+pfn=$(echo "$did_pfn_rse" | cut -f2 -d' ')
+rse=$(echo "$did_pfn_rse" | cut -f3 -d' ')
+name_only=$(echo "$did" | cut -f2 -d':' )
+
+echo "Processing file: ${pfn}"
+echo "RSE: ${rse}"
+echo "DID: ${did}"
+
+# ---- Set event count ----
+nevents="${NUM_EVENTS:-10}"
+
+# ---- Timestamp for unique output names ----
+now=$(date -u +"%Y%m%dT%H%M%SZ")
+jobid=$(echo "${JUSTIN_JOBSUB_ID:-1}" | cut -f1 -d'@' | sed -e "s/\./_/")
+stageid=${JUSTIN_STAGE_ID:-1}
+
+# ---- LArSoft chain ----
+
+# 1. GEN (pure MC)
+echo "Running: GEN stage ..."
+ls -lh
+lar -n "${nevents}" -c gen_genie.fcl -o gen.root
+if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
+
+# 2. G4
+echo "Running: G4 stage ..."
+ls -lh
+lar -c g4.fcl -s gen.root -o g4.root
+if [ $? -ne 0 ]; then echo "G4 failed"; exit 1; fi
+
+# 3. WireCell Sim SP
+echo "Running: WC SIM SP stage ..."
+ls -lh
+label_tag="${name_only}_${jobid}_${stageid}_${now}"
+outdir="out_${label_tag}"
+mkdir -p "${outdir}"
+
+lar -c wcls_sim_sp.fcl -s g4.root -o sp.root
+if [ $? -ne 0 ]; then echo "WCLS failed"; exit 1; fi
+
+# 4. Truth labelling
+echo "Running: True labelling stage ..."
+ls -lh
+truthdir="truth_${label_tag}"
+mkdir -p "${truthdir}"
+pushd "${truthdir}"
+
+lar -c wcls-labelling2d_sep.fcl -s "../sp.root"
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "Truth labeling failed"
+  popd
+  exit 1
+fi
+
+echo "Truth dir contents after lar:"
+ls -lh
+
+shopt -s nullglob
+for f in pixeldata-anode*.h5; do
+  mv -v "$f" "../${outdir}/${label_tag}_${f}"
+done
+
+# Move metadata file (single file, fixed name)
+if [ -f metadata.h5 ]; then
+  mv -v metadata.h5 "../${outdir}/${label_tag}_metadata.h5"
+fi
+
+shopt -u nullglob
+
+popd
+
+echo "Per-job output directory contents:"
+ls -lh "${outdir}" || true
+
+# ---- Package per-job outputs into a tarball for stage-out ----
+tarball="${outdir}.tgz"
+
+echo "Creating tarball ${tarball} from ${outdir}"
+tar -czf "${tarball}" "${outdir}"
+
+echo "Tarball contents:"
+tar -tzf "${tarball}"
+
+ls -lh "${tarball}"
+
+# ---- Mark as processed ----
+echo "${pfn}" > justin-processed-pfns.txt
+
+echo "Job completed successfully."
+
+exit 0
