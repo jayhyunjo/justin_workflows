@@ -1,0 +1,211 @@
+#!/bin/bash
+#
+# fdhd_sparse_v10_16.jobscript
+# FD-HD short chain + sparse conversion + stage-out tarball
+#
+
+# ---- Setup environment ----
+source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
+
+setup dunesw v10_16_00d00 -q e26:prof
+if [ $? -ne 0 ]; then
+  echo "Error setting up dunesw v10_16_00d00"
+  exit 1
+fi
+
+# Prefer uploaded FHiCLs and WireCell configs if provided
+if [ -n "${INPUT_TAR_DIR_LOCAL:-}" ]; then
+  export FW_SEARCH_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FW_SEARCH_PATH}"
+  export FCL_SEARCH_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FCL_SEARCH_PATH}"
+  export FHICL_FILE_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${FHICL_FILE_PATH}"
+  export WIRECELL_PATH="${INPUT_TAR_DIR_LOCAL}/cffm-if/dune10kt-1x2x6:${WIRECELL_PATH}"
+fi
+
+echo "FW_SEARCH_PATH=${FW_SEARCH_PATH}"
+echo "FCL_SEARCH_PATH=${FCL_SEARCH_PATH}"
+echo "FHICL_FILE_PATH=${FHICL_FILE_PATH}"
+echo "WIRECELL_PATH=${WIRECELL_PATH}"
+
+# Parallelism
+JUSTIN_PROCESSORS="${JUSTIN_PROCESSORS:-1}"
+export TF_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OPENBLAS_NUM_THREADS=${JUSTIN_PROCESSORS}
+export JULIA_NUM_THREADS=${JUSTIN_PROCESSORS}
+export MKL_NUM_THREADS=${JUSTIN_PROCESSORS}
+export NUMEXPR_NUM_THREADS=${JUSTIN_PROCESSORS}
+export OMP_NUM_THREADS=${JUSTIN_PROCESSORS}
+
+# ---- Get one input file ----
+did_pfn_rse="$($JUSTIN_PATH/justin-get-file)"
+if [ -z "${did_pfn_rse}" ] ; then
+  echo "No unprocessed files available, exiting."
+  exit 0
+fi
+
+did=$(echo "$did_pfn_rse" | cut -f1 -d' ')
+pfn=$(echo "$did_pfn_rse" | cut -f2 -d' ')
+rse=$(echo "$did_pfn_rse" | cut -f3 -d' ')
+name_only=$(echo "$did" | cut -f2 -d':' )
+
+echo "Processing file: ${pfn}"
+echo "RSE: ${rse}"
+echo "DID: ${did}"
+
+# ---- Set event count ----
+nevents="${NUM_EVENTS:-10}"
+
+# ---- Timestamp for unique output names ----
+now=$(date -u +"%Y%m%dT%H%M%SZ")
+jobid=$(echo "${JUSTIN_JOBSUB_ID:-1}" | cut -f1 -d'@' | sed -e "s/\./_/")
+stageid=${JUSTIN_STAGE_ID:-1}
+label_tag="${name_only}_${jobid}_${stageid}_${now}"
+
+outdir="out_${label_tag}"
+rawdir="${outdir}/raw"
+sparsedir="${outdir}/sparse"
+mkdir -p "${rawdir}" "${sparsedir}"
+
+# ---- LArSoft chain ----
+
+echo "Running: GEN stage ..."
+ls -lh
+lar -n "${nevents}" -c gen_genie.fcl -o gen.root
+if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
+
+echo "Running: G4 stage ..."
+ls -lh
+lar -c g4.fcl -s gen.root -o g4.root
+if [ $? -ne 0 ]; then echo "G4 failed"; exit 1; fi
+
+echo "Running: WC SIM SP stage ..."
+ls -lh
+lar -c wcls_sim_sp.fcl -s g4.root -o sp.root
+if [ $? -ne 0 ]; then echo "WCLS failed"; exit 1; fi
+
+echo "Running: Truth labelling stage ..."
+ls -lh
+truthdir="truth_${label_tag}"
+mkdir -p "${truthdir}"
+pushd "${truthdir}" >/dev/null
+
+lar -c wcls-labelling2d_sep.fcl -s "../sp.root"
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "Truth labeling failed"
+  popd >/dev/null
+  exit 1
+fi
+
+echo "Labelling produced:"
+ls -lh
+
+# Move pixeldata + metadata into rawdir with unique prefix
+shopt -s nullglob
+for f in pixeldata-anode*.h5; do
+  mv -v "$f" "../${rawdir}/${label_tag}_${f}"
+done
+
+if [ -f metadata.h5 ]; then
+  mv -v metadata.h5 "../${rawdir}/${label_tag}_metadata.h5"
+fi
+shopt -u nullglob
+
+popd >/dev/null
+
+echo "Raw outputs:"
+ls -lh "${rawdir}" || true
+
+# ---- Find converter script ----
+converter=""
+if [ -n "${INPUT_TAR_DIR_LOCAL:-}" ] && [ -f "${INPUT_TAR_DIR_LOCAL}/convert-to-sparse.py" ]; then
+  converter="${INPUT_TAR_DIR_LOCAL}/convert-to-sparse.py"
+elif [ -f "./convert-to-sparse.py" ]; then
+  converter="./convert-to-sparse.py"
+fi
+
+if [ -z "${converter}" ]; then
+  echo "ERROR: convert-to-sparse.py not found."
+  echo "Expected at: \$INPUT_TAR_DIR_LOCAL/convert-to-sparse.py or ./convert-to-sparse.py"
+  exit 1
+fi
+
+# ---- Build venv + install deps from wheelhouse (NO internet) ----
+# Use the same python you already have from CVMFS dunesw environment.
+PYTHON_BIN="$(command -v python3)"
+echo "Using converter: ${converter}"
+echo "Python used: ${PYTHON_BIN}"
+${PYTHON_BIN} --version || true
+
+if [ -z "${INPUT_TAR_DIR_LOCAL:-}" ] || [ ! -d "${INPUT_TAR_DIR_LOCAL}/wheels" ]; then
+  echo "ERROR: wheelhouse not found at: ${INPUT_TAR_DIR_LOCAL}/wheels"
+  echo "Make sure your uploaded tar contains wheels/ with numpy + h5py (and optionally scipy)."
+  exit 1
+fi
+
+rm -rf venv_sparse
+${PYTHON_BIN} -m venv venv_sparse
+if [ $? -ne 0 ]; then
+  echo "ERROR: failed to create venv_sparse"
+  exit 1
+fi
+
+# shellcheck disable=SC1091
+source venv_sparse/bin/activate
+
+# Install strictly from wheelhouse, pinned versions
+pip install --no-index --find-links "${INPUT_TAR_DIR_LOCAL}/wheels" \
+  numpy==1.23.5 h5py==3.7.0 scipy==1.9.3
+if [ $? -ne 0 ]; then
+  echo "ERROR: pip install from wheelhouse failed"
+  exit 1
+fi
+
+# sanity import check
+python - <<'PY'
+import numpy, h5py
+print("OK imports:", "numpy", numpy.__version__, "h5py", h5py.__version__)
+PY
+if [ $? -ne 0 ]; then
+  echo "ERROR: python import test failed"
+  exit 1
+fi
+
+# ---- Run sparse conversion ----
+echo "Running sparse conversion..."
+echo "  input:  ${rawdir}"
+echo "  output: ${sparsedir}"
+
+python "${converter}" \
+  --input-dir "${rawdir}" \
+  --output-dir "${sparsedir}" \
+  --pattern "*pixeldata-anode*.h5" \
+  --copy-metadata "*_metadata.h5" \
+  --compression gzip \
+  --compression-level 2
+
+rc=$?
+deactivate || true
+
+if [ $rc -ne 0 ]; then
+  echo "Sparse conversion failed"
+  exit 1
+fi
+
+echo "Sparse outputs:"
+ls -lh "${sparsedir}" || true
+
+# ---- Package per-job outputs into tarball for stage-out ----
+tarball="${outdir}.tgz"
+
+echo "Creating tarball ${tarball} from ${sparsedir}"
+tar -czf "${tarball}" -C "${outdir}" "sparse"
+
+echo "Tarball contents:"
+tar -tzf "${tarball}" || true
+ls -lh "${tarball}" || true
+
+# ---- Mark as processed ----
+echo "${pfn}" > justin-processed-pfns.txt
+
+echo "Job completed successfully."
+exit 0
