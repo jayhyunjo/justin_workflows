@@ -1,7 +1,9 @@
 #!/bin/bash
 #
-# numu_withtruth.jobscript
+# fdhd_sparse_v10_20_numu_notruth.jobscript
 # FD-HD short chain + sparse conversion + stage-out tarball
+# Truth labelling OFF (keep_truth=false): pixeldata is reco-only (rebinned_reco).
+# trackid_pid_map.h5 + metadata.h5 are still produced (rest left as-is).
 # Uses dunesw v10_20_08d00 with a LOCAL build of larwirecell v10_03_05
 # (branch xn/trackid_pid_map: TrackIDPIDMap2h5 + Labelling2D extensions),
 # shipped in the input bundle under ${INPUT_TAR_DIR_LOCAL}/localProducts.
@@ -109,7 +111,7 @@ truthdir="truth_${label_tag}"
 mkdir -p "${truthdir}"
 pushd "${truthdir}" >/dev/null
 
-lar -c wcls-labelling2d_sep.fcl -s "../sp.root"
+lar -c wcls-labelling2d_sep_notruth.fcl -s "../sp.root"
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "Truth labeling failed"

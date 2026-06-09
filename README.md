@@ -18,11 +18,11 @@ a variant with `--jobscript`.
 
 | Jobscript | Beam (generator fcl) | Truth labels (labelling fcl) |
 |---|---|---|
-| `numu_withtruth.jobscript`          | νμ full FHC beam (`gen_genie.fcl`)                          | on  (`wcls-labelling2d_sep.fcl`) |
-| `numu_notruth.jobscript`            | νμ full FHC beam (`gen_genie.fcl`)                          | off (`wcls-labelling2d_sep_notruth.fcl`) |
-| `nue_withtruth.jobscript`           | νe appearance / swap (`gen_genie_nueswap.fcl`)             | on  (`wcls-labelling2d_sep.fcl`) |
-| `nue_notruth.jobscript`             | νe appearance / swap (`gen_genie_nueswap.fcl`)             | off (`wcls-labelling2d_sep_notruth.fcl`) |
-| `intrinsic_nue_withtruth.jobscript` | intrinsic beam νe, `GenFlavors:[12]` (`gen_genie_nue.fcl`) | on  (`wcls-labelling2d_sep.fcl`) |
+| `fdhd_sparse_v10_20_numu_withtruth.jobscript`          | νμ full FHC beam (`gen_genie.fcl`)                          | on  (`wcls-labelling2d_sep.fcl`) |
+| `fdhd_sparse_v10_20_numu_notruth.jobscript`            | νμ full FHC beam (`gen_genie.fcl`)                          | off (`wcls-labelling2d_sep_notruth.fcl`) |
+| `fdhd_sparse_v10_20_nue_withtruth.jobscript`           | νe appearance / swap (`gen_genie_nueswap.fcl`)             | on  (`wcls-labelling2d_sep.fcl`) |
+| `fdhd_sparse_v10_20_nue_notruth.jobscript`             | νe appearance / swap (`gen_genie_nueswap.fcl`)             | off (`wcls-labelling2d_sep_notruth.fcl`) |
+| `fdhd_sparse_v10_20_intrinsic_nue_withtruth.jobscript` | intrinsic beam νe, `GenFlavors:[12]` (`gen_genie_nue.fcl`) | on  (`wcls-labelling2d_sep.fcl`) |
 
 **Beam**
 - `numu_*` — full FHC beam (νμ-dominated, all flavors); the standard nominal beam.

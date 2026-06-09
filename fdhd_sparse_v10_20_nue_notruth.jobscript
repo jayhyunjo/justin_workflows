@@ -1,9 +1,8 @@
 #!/bin/bash
 #
-# numu_notruth.jobscript
+# fdhd_sparse_v10_20_nue_notruth.jobscript
 # FD-HD short chain + sparse conversion + stage-out tarball
-# Truth labelling OFF (keep_truth=false): pixeldata is reco-only (rebinned_reco).
-# trackid_pid_map.h5 + metadata.h5 are still produced (rest left as-is).
+# nu_e APPEARANCE (swap) generator + truth labelling OFF (reco-only pixeldata).
 # Uses dunesw v10_20_08d00 with a LOCAL build of larwirecell v10_03_05
 # (branch xn/trackid_pid_map: TrackIDPIDMap2h5 + Labelling2D extensions),
 # shipped in the input bundle under ${INPUT_TAR_DIR_LOCAL}/localProducts.
@@ -90,9 +89,9 @@ mkdir -p "${rawdir}" "${sparsedir}"
 
 # ---- LArSoft chain ----
 
-echo "Running: GEN stage ..."
+echo "Running: GEN stage (nu_e appearance / numu->nu_e swap) ..."
 ls -lh
-lar -n "${nevents}" -c gen_genie.fcl -o gen.root
+lar -n "${nevents}" -c gen_genie_nueswap.fcl -o gen.root
 if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
 
 echo "Running: G4 stage ..."

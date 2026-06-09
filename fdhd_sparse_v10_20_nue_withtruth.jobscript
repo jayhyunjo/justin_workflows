@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# nue_withtruth.jobscript
+# fdhd_sparse_v10_20_nue_withtruth.jobscript
 # FD-HD short chain + sparse conversion + stage-out tarball
 # nu_e APPEARANCE (swap) sample via gen_genie_nueswap.fcl (numu flux -> nu_e).
 # Uses dunesw v10_20_08d00 with a LOCAL build of larwirecell v10_03_05
