@@ -1,0 +1,10 @@
+# gen_genie_nue.fcl
+# Intrinsic beam electron-neutrino (nu_e, PDG 12) only.
+#
+# Includes the standard full-beam GENIE config and overrides the generated
+# flavor list. Default in gen_genie.fcl is [12, 14, -12, -14] (numu-dominated
+# LBNF beam); here we restrict GENIE to sample only the nu_e flux rays.
+
+#include "gen_genie.fcl"
+
+physics.producers.generator.GenFlavors: [ 12 ]

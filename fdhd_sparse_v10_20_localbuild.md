@@ -206,3 +206,26 @@ Outputs stage out to `${FNALURL}/${USERF}` on dCache scratch.
 - dense `pixeldata-anode*.h5` contain `frame_energyfrac_1st/2nd` + `frame_total_numelectrons`.
 - sparse `pixeldata-anode*.h5` in `out_*.tgz` contain those same frames as `coords/features`,
   plus `trackid_pid_map.h5` copied as-is.
+
+---
+
+## 10. Flavor variants (hardcoded), e.g. intrinsic nu_e only
+
+To run a single beam flavor, add a thin GENIE override fcl plus a sibling jobscript that uses
+it for the GEN stage — the full-beam files stay untouched:
+
+- [`configs/gen_genie_nue.fcl`](configs/gen_genie_nue.fcl) — `#include "gen_genie.fcl"` then
+  `physics.producers.generator.GenFlavors: [ 12 ]` (PDG 12 = nu_e). This selects only the
+  intrinsic beam nu_e rays from the numu-dominated LBNF flux → a pure nu_e sample with the
+  correct beam-nu_e spectrum. (GEN is somewhat slower, since nu_e is ~1% of the flux.)
+- [`fdhd_sparse_v10_20_nue.jobscript`](fdhd_sparse_v10_20_nue.jobscript) — identical to
+  `fdhd_sparse_v10_20.jobscript` except the GEN stage runs `gen_genie_nue.fcl`.
+
+Other flavors: `[ -12 ]` = nu_e_bar, `[ 14 ]` = nu_mu, `[ -14 ]` = nu_mu_bar.
+
+`configs/gen_genie_nue.fcl` is the tracked source; it must also be placed in the bundle's
+`cffm-if/dune10kt-1x2x6/` (next to `gen_genie.fcl`, which it includes) before
+`justin-cvmfs-upload`.
+
+Validated (local `justin-test-jobscript`, 1 evt): GENIE MCTruth `nu_pdg = 12 (nu_e) CC`;
+sparse output carries the energyfrac/numelectrons frames plus `trackid_pid_map.h5`.
