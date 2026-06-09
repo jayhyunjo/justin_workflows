@@ -1,0 +1,17 @@
+# gen_genie_nueswap.fcl
+# nu_e APPEARANCE ("swap") sample for FD-HD dune10kt 1x2x6.
+#
+# Reuses the customized full-beam GENIE config in gen_genie.fcl (fiducial volume,
+# beam center, simple_flux window, GenFlavors, etc.) and only enables GENIE's flux
+# flavor Mixer to swap the numu-dominated LBNF beam into nu_e:
+#     14 -> 12   numu      -> nu_e     (nu_e at full numu-flux statistics)
+#     12 -> 16   intrinsic nu_e -> nu_tau  (avoids double-counting intrinsic nu_e)
+#    -14 -> -12, -12 -> -16   anti-nu equivalents
+#
+# This mirrors DUNE's prodgenie_nue_dune10kt_1x2x6.fcl, which differs from the
+# nonswap prodgenie_nu_dune10kt_1x2x6.fcl ONLY by this MixerConfig line. Same flux
+# files as gen_genie.fcl; no extra data needed.
+
+#include "gen_genie.fcl"
+
+physics.producers.generator.MixerConfig: "map 12:16 -12:-16 14:12 -14:-12"

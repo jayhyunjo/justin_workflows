@@ -229,3 +229,24 @@ Other flavors: `[ -12 ]` = nu_e_bar, `[ 14 ]` = nu_mu, `[ -14 ]` = nu_mu_bar.
 
 Validated (local `justin-test-jobscript`, 1 evt): GENIE MCTruth `nu_pdg = 12 (nu_e) CC`;
 sparse output carries the energyfrac/numelectrons frames plus `trackid_pid_map.h5`.
+
+### Intrinsic nu_e vs nu_e-appearance ("swap") — prefer swap for statistics
+
+`gen_genie_nue.fcl` above selects the **intrinsic** beam nu_e (~1% of the flux) → physically
+real beam nu_e, but low rate and slow to generate. For a *sizable* nu_e sample, use the
+**swap** sample instead, which relabels the dominant numu flux as nu_e (the nu_e-appearance
+signal) — nu_e at full numu-flux statistics, and fast to generate:
+
+- [`configs/gen_genie_nueswap.fcl`](configs/gen_genie_nueswap.fcl) — `#include "gen_genie.fcl"`
+  then `physics.producers.generator.MixerConfig: "map 12:16 -12:-16 14:12 -14:-12"`
+  (`14->12` numu→nu_e; `12->16` intrinsic nu_e→nu_tau to avoid double counting). This is the
+  one-line difference between DUNE's `prodgenie_nu_dune10kt_1x2x6.fcl` (nonswap) and
+  `prodgenie_nue_dune10kt_1x2x6.fcl` (swap); we apply it on top of the customized
+  `gen_genie.fcl` so the fiducial/beam-center customizations are preserved.
+- [`fdhd_sparse_v10_20_nueswap.jobscript`](fdhd_sparse_v10_20_nueswap.jobscript) — GEN stage
+  runs `gen_genie_nueswap.fcl`; rest identical.
+
+Same flux files as `gen_genie.fcl` (no new data). Keeps the base `GenFlavors`, so the sample
+is nu_e-dominant with a small nu_e_bar component (FHC); add `GenFlavors: [ 12 ]` for strictly
+nu_e. Validated (local, 1 evt): `nu_pdg = 12 (nu_e) CC`, fast GEN, sparse frames +
+`trackid_pid_map.h5` present.
