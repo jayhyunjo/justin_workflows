@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# fdhd_sparse_v10_20_nue.jobscript
+# nue_notruth.jobscript
 # FD-HD short chain + sparse conversion + stage-out tarball
-# Intrinsic beam nu_e ONLY (PDG 12) via gen_genie_nue.fcl.
+# nu_e APPEARANCE (swap) generator + truth labelling OFF (reco-only pixeldata).
 # Uses dunesw v10_20_08d00 with a LOCAL build of larwirecell v10_03_05
 # (branch xn/trackid_pid_map: TrackIDPIDMap2h5 + Labelling2D extensions),
 # shipped in the input bundle under ${INPUT_TAR_DIR_LOCAL}/localProducts.
@@ -89,9 +89,9 @@ mkdir -p "${rawdir}" "${sparsedir}"
 
 # ---- LArSoft chain ----
 
-echo "Running: GEN stage (intrinsic beam nu_e only, PDG 12) ..."
+echo "Running: GEN stage (nu_e appearance / numu->nu_e swap) ..."
 ls -lh
-lar -n "${nevents}" -c gen_genie_nue.fcl -o gen.root
+lar -n "${nevents}" -c gen_genie_nueswap.fcl -o gen.root
 if [ $? -ne 0 ]; then echo "GEN failed"; exit 1; fi
 
 echo "Running: G4 stage ..."
@@ -110,7 +110,7 @@ truthdir="truth_${label_tag}"
 mkdir -p "${truthdir}"
 pushd "${truthdir}" >/dev/null
 
-lar -c wcls-labelling2d_sep.fcl -s "../sp.root"
+lar -c wcls-labelling2d_sep_notruth.fcl -s "../sp.root"
 rc=$?
 if [ $rc -ne 0 ]; then
   echo "Truth labeling failed"

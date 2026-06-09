@@ -5,11 +5,30 @@ dense→sparse HDF5** on justIN using a **locally-built (non-official) `larwirec
 to the grid worker nodes inside the input bundle. It generalizes to any future case where you
 need a custom-built UPS product in a justIN job.
 
-- Jobscript: [`fdhd_sparse_v10_20.jobscript`](fdhd_sparse_v10_20.jobscript)
+- Jobscripts: five variants (beam × truth on/off) — see **Jobscript variants** below
 - Base release: `dunesw v10_20_08d00 -q e26:prof`
 - Custom product: `larwirecell` UPS `v10_03_05`, branch `xn/trackid_pid_map`
   (`Ningclover/larwirecell`) — adds `TrackIDPIDMap2h5` (MC-truth → HDF5) and Labelling2D
   energy-fraction / total-num-electrons outputs.
+
+---
+
+## Jobscript variants
+
+All variants share one bundle (`fdhd_v10_20_localwc_bundle.tar`) and the local larwirecell
+build; they differ only in which generator + labelling fcl the jobscript runs. Upload the
+bundle once, then pick a variant with `--jobscript`.
+
+| Jobscript | Beam (generator fcl) | Truth labels (labelling fcl) |
+|---|---|---|
+| `numu_withtruth.jobscript`          | νμ full FHC beam (`gen_genie.fcl`)              | on  (`wcls-labelling2d_sep.fcl`) |
+| `numu_notruth.jobscript`            | νμ full FHC beam (`gen_genie.fcl`)              | off (`wcls-labelling2d_sep_notruth.fcl`) |
+| `nue_withtruth.jobscript`           | νe appearance / swap (`gen_genie_nueswap.fcl`)  | on  (`wcls-labelling2d_sep.fcl`) |
+| `nue_notruth.jobscript`             | νe appearance / swap (`gen_genie_nueswap.fcl`)  | off (`wcls-labelling2d_sep_notruth.fcl`) |
+| `intrinsic_nue_withtruth.jobscript` | intrinsic beam νe, `GenFlavors:[12]` (`gen_genie_nue.fcl`) | on  (`wcls-labelling2d_sep.fcl`) |
+
+"Truth off" flips `keep_truth → false` so `pixeldata-anode*.h5` is reco-only (`rebinned_reco`);
+`trackid_pid_map.h5` + `metadata.h5` are still produced. See §6 (converter) and §10 (variants).
 
 ---
 
@@ -110,7 +129,7 @@ a new one. Allow a few minutes for CVMFS propagation before the path is readable
 
 ## 5. How the jobscript reads the local build
 
-The relevant part of [`fdhd_sparse_v10_20.jobscript`](fdhd_sparse_v10_20.jobscript):
+The relevant part of [`numu_withtruth.jobscript`](numu_withtruth.jobscript):
 
 ```bash
 source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
@@ -159,7 +178,7 @@ Each `frame_*` is stored sparsely as `coords` (nonzero indices) + `features`. Th
 
 1. **Local test** (worker-node emulation, binds only /cvmfs):
    ```bash
-   justin-test-jobscript --monte-carlo 1 --jobscript fdhd_sparse_v10_20.jobscript \
+   justin-test-jobscript --monte-carlo 1 --jobscript numu_withtruth.jobscript \
      --env NUM_EVENTS=1 --env INPUT_TAR_DIR_LOCAL="$INPUT_TAR_DIR_LOCAL"
    ```
    Outputs land in `/tmp/justin-test-jobscript.XXXXXX/home/workspace`.
@@ -172,7 +191,7 @@ Submission template:
 export USERF="$USER"
 export FNALURL="https://fndcadoor.fnal.gov:2880/dune/scratch/users"
 justin simple-workflow \
-  --monte-carlo <N> --jobscript fdhd_sparse_v10_20.jobscript \
+  --monte-carlo <N> --jobscript numu_withtruth.jobscript \
   --env NUM_EVENTS=<n> --env INPUT_TAR_DIR_LOCAL="$INPUT_TAR_DIR_LOCAL" \
   --rss-mib 4999 --output-pattern "out_*.tgz:${FNALURL}/${USERF}"
 ```
@@ -218,8 +237,8 @@ it for the GEN stage — the full-beam files stay untouched:
   `physics.producers.generator.GenFlavors: [ 12 ]` (PDG 12 = nu_e). This selects only the
   intrinsic beam nu_e rays from the numu-dominated LBNF flux → a pure nu_e sample with the
   correct beam-nu_e spectrum. (GEN is somewhat slower, since nu_e is ~1% of the flux.)
-- [`fdhd_sparse_v10_20_nue.jobscript`](fdhd_sparse_v10_20_nue.jobscript) — identical to
-  `fdhd_sparse_v10_20.jobscript` except the GEN stage runs `gen_genie_nue.fcl`.
+- [`intrinsic_nue_withtruth.jobscript`](intrinsic_nue_withtruth.jobscript) — identical to
+  `numu_withtruth.jobscript` except the GEN stage runs `gen_genie_nue.fcl`.
 
 Other flavors: `[ -12 ]` = nu_e_bar, `[ 14 ]` = nu_mu, `[ -14 ]` = nu_mu_bar.
 
@@ -243,7 +262,7 @@ signal) — nu_e at full numu-flux statistics, and fast to generate:
   one-line difference between DUNE's `prodgenie_nu_dune10kt_1x2x6.fcl` (nonswap) and
   `prodgenie_nue_dune10kt_1x2x6.fcl` (swap); we apply it on top of the customized
   `gen_genie.fcl` so the fiducial/beam-center customizations are preserved.
-- [`fdhd_sparse_v10_20_nueswap.jobscript`](fdhd_sparse_v10_20_nueswap.jobscript) — GEN stage
+- [`nue_withtruth.jobscript`](nue_withtruth.jobscript) — GEN stage
   runs `gen_genie_nueswap.fcl`; rest identical.
 
 Same flux files as `gen_genie.fcl` (no new data). Keeps the base `GenFlavors`, so the sample

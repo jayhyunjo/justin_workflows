@@ -1,0 +1,13 @@
+# wcls-labelling2d_sep_notruth.fcl
+# Truth labelling OFF.
+#
+# Reuses the standard labelling config and only flips keep_truth -> false, so the
+# per-anode pixeldata-anode*.h5 contain ONLY the reco image (rebinned_reco) with
+# no per-pixel truth-label frames (trackid/energyfrac/total_numelectrons).
+#
+# Everything else is left as-is (per request): the Truth2h5 (metadata.h5) and
+# TrackIDPIDMap2h5 (trackid_pid_map.h5) nodes still run and are still produced.
+
+#include "wcls-labelling2d_sep.fcl"
+
+physics.producers.wclsmcnfsp.wcls_main.structs.keep_truth: false
