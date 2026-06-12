@@ -11,7 +11,9 @@ schema, gotchas — are in
 [`fdhd_sparse_v10_20_localbuild.md`](fdhd_sparse_v10_20_localbuild.md).
 
 To run the same chain **interactively** (no justIN — just `lar` by hand), see
-[`fdhd_sparse_v10_20_interactive.md`](fdhd_sparse_v10_20_interactive.md).
+[`fdhd_sparse_v10_20_interactive.md`](fdhd_sparse_v10_20_interactive.md) (on a FNAL GPVM), or
+[`fdhd_sparse_v10_20_interactive_offsite.md`](fdhd_sparse_v10_20_interactive_offsite.md) to run
+in a container on a non-GPVM machine (CVMFS + apptainer + the portable bundle).
 
 ## Jobscript variants
 
