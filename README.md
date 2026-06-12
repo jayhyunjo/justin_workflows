@@ -10,6 +10,9 @@ Full details — bundle assembly, how the local build is set up on the worker, c
 schema, gotchas — are in
 [`fdhd_sparse_v10_20_localbuild.md`](fdhd_sparse_v10_20_localbuild.md).
 
+To run the same chain **interactively** (no justIN — just `lar` by hand), see
+[`fdhd_sparse_v10_20_interactive.md`](fdhd_sparse_v10_20_interactive.md).
+
 ## Jobscript variants
 
 All variants share one bundle and the same local larwirecell build; they differ only in the
