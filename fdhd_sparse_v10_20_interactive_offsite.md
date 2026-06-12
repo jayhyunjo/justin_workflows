@@ -47,12 +47,17 @@ deps for the optional sparse step.
   source localProducts_larsoft_v10_20_08_e26_prof/setup
   cd srcs
   git clone https://github.com/Ningclover/larwirecell.git -b xn/trackid_pid_map
-  # ups/product_deps must declare larevt v10_00_19 and wirecell v0_34_2 (what v10_20_08d00
-  # provides); check with `ups active | grep -E 'larevt|wirecell'` and edit if needed.
+  # REQUIRED FIX: this branch pins `wirecell v0_36_1` in ups/product_deps, but
+  # dunesw v10_20_08d00 provides v0_34_2 -> the build fails without this edit.
+  # (larevt v10_00_19 and larsim v10_20_02 already match the release.)
+  sed -i 's/v0_36_1/v0_34_2/' larwirecell/ups/product_deps
+  mrb uc                 # register larwirecell in srcs/CMakeLists.txt
   cd ..
   mrbsetenv
-  mrb i -j8        # builds larwirecell -> localProducts
+  mrb i -j8              # build + install -> localProducts/larwirecell/v10_03_05
   ```
+  (Validated: this produces `larwirecell v10_03_05` with `libWireCellAIML.so` carrying the
+  `TrackIDPIDMap2h5` module — identical to the prebuilt bundle.)
 - **configs** — clone the cffm-if repo (configs are committed unmodified on this branch; the
   21 MB `ts-model/CP49_mobilenetv3.ts` is a plain git blob, so a normal clone fetches it):
   ```bash
