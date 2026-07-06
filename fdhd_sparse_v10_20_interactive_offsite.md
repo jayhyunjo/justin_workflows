@@ -151,6 +151,9 @@ sparse conversion each `frame_*` becomes `coords`+`features`.
   (table uses only `${UPS_PROD_DIR}`-relative paths).
 - **Repos/branches differ**: configs = `HaiwangYu/cffm-if` `xn/rebin_2`; larwirecell source =
   `Ningclover/larwirecell` `xn/trackid_pid_map`.
+- **SimChannel smearing**: the upstream cffm-if `wcls-sim-drift-simchannel-nf-sp.jsonnet` is
+  *sharp*. For truth↔reco registration, apply the two `smear_long`/`smear_tran` keys (or use
+  the tracked `configs/wcls-sim-drift-simchannel-nf-sp.jsonnet`). See §11 of the localbuild doc.
 - **Flux streaming** from `dune.osgstorage.org` over CVMFS can be slow off-site. If so, set
   `gen_genie.fcl`'s `FluxCopyMethod: "IFDH"` (copy-then-read) or point `FluxSearchPaths` at a
   local copy of the flux files.

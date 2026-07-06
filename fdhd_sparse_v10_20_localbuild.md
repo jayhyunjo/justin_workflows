@@ -174,30 +174,68 @@ Each `frame_*` is stored sparsely as `coords` (nonzero indices) + `features`. Th
 
 ---
 
-## 7. Staged rollout
+## 7. Submitting to justIN — step by step
 
-1. **Local test** (worker-node emulation, binds only /cvmfs):
-   ```bash
-   justin-test-jobscript --monte-carlo 1 --jobscript fdhd_sparse_v10_20_numu_withtruth.jobscript \
-     --env NUM_EVENTS=1 --env INPUT_TAR_DIR_LOCAL="$INPUT_TAR_DIR_LOCAL"
-   ```
-   Outputs land in `/tmp/justin-test-jobscript.XXXXXX/home/workspace`.
-2. **Single grid job**: `justin simple-workflow --monte-carlo 1 --env NUM_EVENTS=1 ...`
-3. **Small batch**: `--monte-carlo 10 --env NUM_EVENTS=10`
-4. **Full batch**: `--monte-carlo <N> --env NUM_EVENTS=10 --rss-mib 4999`
+**0. Enter the SL7 container + set up justin** (once per login; the web auth lasts 7 days):
+```bash
+~/dune_container.sh                                              # apptainer shell into fnal-dev-sl7
+source /cvmfs/dune.opensciencegrid.org/products/dune/setup_dune.sh
+setup justin
+justin get-token          # prints a dunejustin.fnal.gov/authorize URL -> open it, confirm the session code
+```
 
-Submission template:
+**1. Upload the bundle** → capture `INPUT_TAR_DIR_LOCAL` (re-run only when the bundle changes;
+one upload serves all jobscripts):
+```bash
+cd /exp/dune/app/users/jjo
+INPUT_TAR_DIR_LOCAL=$(justin-cvmfs-upload fdhd_v10_20_localwc_bundle.tar)
+echo "$INPUT_TAR_DIR_LOCAL"
+```
+Wait ~2–5 min for CVMFS to propagate before submitting (an immediate "localProducts not found"
+just means it propagated late — resubmit).
+
+**2. Stage-out destination:**
 ```bash
 export USERF="$USER"
 export FNALURL="https://fndcadoor.fnal.gov:2880/dune/scratch/users"
-justin simple-workflow \
-  --monte-carlo <N> --jobscript fdhd_sparse_v10_20_numu_withtruth.jobscript \
-  --env NUM_EVENTS=<n> --env INPUT_TAR_DIR_LOCAL="$INPUT_TAR_DIR_LOCAL" \
-  --rss-mib 4999 --output-pattern "out_*.tgz:${FNALURL}/${USERF}"
+cd /exp/dune/app/users/jjo/justin_workflows
 ```
 
-Monitor: `justin show-workflow --workflow-id <ID>` / `justin show-jobs --workflow-id <ID>`.
-Outputs stage out to `${FNALURL}/${USERF}` on dCache scratch.
+**3. Submit** — pick a jobscript from the variant table above; scale with `--monte-carlo`
+(number of jobs) and `NUM_EVENTS` (events/job). For a new/changed variant, start with 1 job,
+then 10, then full:
+```bash
+justin simple-workflow \
+  --monte-carlo 1 \
+  --jobscript fdhd_sparse_v10_20_numu_withtruth.jobscript \
+  --env NUM_EVENTS=10 \
+  --env INPUT_TAR_DIR_LOCAL="$INPUT_TAR_DIR_LOCAL" \
+  --rss-mib 4999 \
+  --output-pattern "out_*.tgz:${FNALURL}/${USERF}"
+```
+Prints a **workflow ID**. (For a local, no-grid dry run: replace `simple-workflow` with
+`justin-test-jobscript` — same `--jobscript`/`--env`; outputs land in
+`/tmp/justin-test-jobscript.XXXXXX/home/workspace`.)
+
+**4. Monitor:**
+```bash
+justin show-workflows --workflow-id <ID>     # overall state
+justin show-stages    --workflow-id <ID>     # % progress
+justin show-jobs      --workflow-id <ID>     # per-job states
+justin fetch-logs --jobsub-id <JOBSUB_ID> --unpack    # on a failure, then read jobscript.log
+```
+justIN over-subscribes for MC targets (you'll see more jobs than `--monte-carlo`); an occasional
+`jobscript_error` is usually transient flux-file I/O on a flaky site and is retried automatically.
+
+**5. Collect outputs** (dCache scratch):
+```bash
+gfal-ls -l ${FNALURL}/${USERF}/ | grep out_        # list staged-out tarballs
+gfal-copy ${FNALURL}/${USERF}/out_<...>.tgz ./      # pull one down
+tar -tzf out_<...>.tgz                              # sparse/*.h5 + metadata.h5 + trackid_pid_map.h5
+```
+
+**Typical flow for a fresh variant:** upload (step 1) → `justin-test-jobscript` (local sanity) →
+`simple-workflow --monte-carlo 1` (verify output) → `--monte-carlo 10` → full.
 
 ---
 
@@ -269,3 +307,37 @@ Same flux files as `gen_genie.fcl` (no new data). Keeps the base `GenFlavors`, s
 is nu_e-dominant with a small nu_e_bar component (FHC); add `GenFlavors: [ 12 ]` for strictly
 nu_e. Validated (local, 1 evt): `nu_pdg = 12 (nu_e) CC`, fast GEN, sparse frames +
 `trackid_pid_map.h5` present.
+
+---
+
+## 11. SimChannel smearing (truth ↔ reco registration) — ENABLED in this bundle
+
+By default the truth SimChannel is *sharp* relative to the SP/reco charge (it carries drift
+diffusion but not the field-response + electronics + SP-deconvolution broadening), so a rim of
+real reco charge at track/shower edges gets truth label 0 (Background). This bundle enables
+**in-pipeline SimChannel smearing** to fix that at the source: the truth footprint is broadened
+to SP/reco resolution so the 2D labels register onto the deconvolved reco charge.
+
+**The change** — two keys on the `wclsDepoFluxWriter` node named `postdrift` in
+[`configs/wcls-sim-drift-simchannel-nf-sp.jsonnet`](configs/wcls-sim-drift-simchannel-nf-sp.jsonnet)
+(the Sim+SP graph that `wcls_sim_sp.fcl` loads via its `configs:` list):
+```jsonnet
+smear_long: 2.6526,                        // raw ticks; = sigma_t/tick, sigma_t = 1/(2*pi*0.12MHz) = 1.326 us
+smear_tran: [0.37612, 0.37612, 0.09403],   // wire pitch, per plane [U,V,W]; induction k=0.75->0.376, collection k=3.0->0.094
+```
+`DepoFluxWriter` adds these Gaussian widths **in quadrature** on top of each post-drift depo's
+physical diffusion (`0.0` = no *extra* smearing = the stock/sharp behavior). No C++, tagger,
+or converter change. The numbers are the dune10kt-1x2x6 SP-filter recipe (time: `Gaus_wide`
+σ_f=0.12 MHz; wire: σ_w = 1/(2·√π·k), induction k=0.75, collection k=3.0).
+
+**Scope**: applies to **all** variants — every jobscript runs `wcls_sim_sp.fcl` → this one
+jsonnet. Only the `*_withtruth` samples are affected in practice (`*_notruth` pixeldata is
+reco-only). Reco (`frame_rebinned_reco`) is unchanged; only the truth footprint
+(`frame_total_numelectrons` + label frames) grows to match reco.
+
+**Off-site / from-source**: the upstream `HaiwangYu/cffm-if` jsonnet is *sharp* — apply the two
+keys above, or use the tracked `configs/wcls-sim-drift-simchannel-nf-sp.jsonnet`. To revert to
+sharp, delete the two keys (or set both `0.0`).
+
+**Verify from a `*_withtruth` output**: the untagged reco-charge fraction on the collection
+plane (W) should be ~0% (sharp: a few %); the truth footprint grows ~35–55%; reco is unchanged.
